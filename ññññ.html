@@ -1,0 +1,344 @@
+<script type="text/javascript">
+        var gk_isXlsx = false;
+        var gk_xlsxFileLookup = {};
+        var gk_fileData = {};
+        function filledCell(cell) {
+          return cell !== '' && cell != null;
+        }
+        function loadFileData(filename) {
+        if (gk_isXlsx && gk_xlsxFileLookup[filename]) {
+            try {
+                var workbook = XLSX.read(gk_fileData[filename], { type: 'base64' });
+                var firstSheetName = workbook.SheetNames[0];
+                var worksheet = workbook.Sheets[firstSheetName];
+
+                // Convert sheet to JSON to filter blank rows
+                var jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1, blankrows: false, defval: '' });
+                // Filter out blank rows (rows where all cells are empty, null, or undefined)
+                var filteredData = jsonData.filter(row => row.some(filledCell));
+
+                // Heuristic to find the header row by ignoring rows with fewer filled cells than the next row
+                var headerRowIndex = filteredData.findIndex((row, index) =>
+                  row.filter(filledCell).length >= filteredData[index + 1]?.filter(filledCell).length
+                );
+                // Fallback
+                if (headerRowIndex === -1 || headerRowIndex > 25) {
+                  headerRowIndex = 0;
+                }
+
+                // Convert filtered JSON back to CSV
+                var csv = XLSX.utils.aoa_to_sheet(filteredData.slice(headerRowIndex)); // Create a new sheet from filtered array of arrays
+                csv = XLSX.utils.sheet_to_csv(csv, { header: 1 });
+                return csv;
+            } catch (e) {
+                console.error(e);
+                return "";
+            }
+        }
+        return gk_fileData[filename] || "";
+        }
+        </script><!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Unlocked LS</title>
+    <style>
+        body {
+            margin: 0;
+            background: #000;
+            font-family: Arial, sans-serif;
+            overflow-x: hidden;
+            overflow-y: auto;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            color: white;
+            min-height: 100vh;
+        }
+        .stars {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: 1;
+            pointer-events: none;
+        }
+        .star {
+            position: absolute;
+            width: 20px;
+            height: 20px;
+            background: #FFFFFF;
+            border-radius: 50%;
+            opacity: 0.8;
+        }
+        h1, p, h2, .game-square a, .game-square p {
+            position: relative;
+            z-index: 2;
+            color: white;
+            text-align: center;
+        }
+        h1 {
+            font-family: "Arial Black", Arial, sans-serif;
+            font-size: 3em;
+            margin: 20px 0 10px 0;
+            text-shadow: 0 0 10px rgba(255, 255, 255, 0.8), 0 0 20px rgba(255, 255, 255, 0.6), 2px 2px 4px rgba(0, 0, 0, 0.5);
+        }
+        p.description {
+            font-family: Impact, Arial, sans-serif;
+            font-size: 1.5em;
+            margin: 0 20px 10px 20px;
+            text-shadow: 1px 1px 3px rgba(0, 0, 0, 0.3);
+        }
+        h2 {
+            font-family: Impact, Arial, sans-serif;
+            font-size: 2em;
+            margin: 10px 0 20px 0;
+            text-shadow: 1px 1px 3px rgba(0, 0, 0, 0.3);
+        }
+        .game-container {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+            gap: 15px;
+            padding: 20px;
+            max-width: 900px;
+            width: 100%;
+            z-index: 2;
+            position: relative;
+        }
+        .game-square {
+            background: rgba(255, 255, 255, 0.3);
+            border: 2px solid white;
+            border-radius: 10px;
+            padding: 10px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            min-height: 180px;
+            text-align: center;
+        }
+        .game-square a {
+            font-family: Impact, Arial, sans-serif;
+            font-size: 1.2em;
+            text-decoration: none;
+            margin-bottom: 8px;
+            text-shadow: 1px 1px 3px rgba(0, 0, 0, 0.3);
+            cursor: pointer;
+        }
+        .game-square p {
+            font-family: Arial, sans-serif;
+            font-size: 0.9em;
+            margin: 0;
+        }
+        .iframe-container {
+            display: none;
+            position: relative;
+            width: 100%;
+            max-width: 900px;
+            margin: 20px 0;
+            z-index: 3;
+        }
+        .iframe-container.active {
+            display: block;
+        }
+        .iframe-container iframe {
+            width: 100%;
+            height: 500px;
+            border: 2px solid white;
+            border-radius: 10px;
+            background: #fff;
+        }
+        .iframe-container.fullscreen {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            max-width: none;
+            margin: 0;
+            background: #000;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+        .iframe-container.fullscreen iframe {
+            width: 100%;
+            height: 100%;
+            border: none;
+        }
+        .iframe-controls {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            display: flex;
+            gap: 10px;
+            z-index: 4;
+        }
+        .iframe-controls button {
+            background: rgba(255, 255, 255, 0.2);
+            border: 1px solid white;
+            color: white;
+            font-family: Arial, sans-serif;
+            padding: 5px 10px;
+            border-radius: 5px;
+            cursor: pointer;
+            text-shadow: 1px 1px 2px rgba(0, 0, 0, 0.3);
+        }
+        .iframe-controls button:hover {
+            background: rgba(255, 255, 255, 0.3);
+        }
+        .proxy-section {
+            width: 100%;
+            max-width: 900px;
+            margin: 20px 0;
+            z-index: 2;
+            position: relative;
+        }
+        .proxy-section iframe {
+            width: 100%;
+            height: 500px;
+            border: 2px solid white;
+            border-radius: 10px;
+            background: #fff;
+        }
+    </style>
+    <script>
+        // Script para los círculos que rebotan
+        window.onload = function() {
+            const circles = document.querySelectorAll('.star');
+            const circleData = [];
+
+            // Inicializar cada círculo
+            circles.forEach(circle => {
+                const size = 20; // Tamaño del círculo
+                const x = Math.random() * (window.innerWidth - size);
+                const y = Math.random() * (window.innerHeight - size);
+                const speedX = (Math.random() * 4 + 2) * (Math.random() > 0.5 ? 1 : -1); // Velocidad X entre 2 y 6
+                const speedY = (Math.random() * 4 + 2) * (Math.random() > 0.5 ? 1 : -1); // Velocidad Y entre 2 y 6
+
+                circle.style.left = x + 'px';
+                circle.style.top = y + 'px';
+
+                circleData.push({
+                    element: circle,
+                    x: x,
+                    y: y,
+                    speedX: speedX,
+                    speedY: speedY
+                });
+
+                console.log(`Círculo inicializado en x: ${x}, y: ${y}, speedX: ${speedX}, speedY: ${speedY}`);
+            });
+
+            function animateCircles() {
+                circleData.forEach(data => {
+                    let { element, x, y, speedX, speedY } = data;
+                    const size = 20;
+
+                    // Actualizar posición
+                    x += speedX;
+                    y += speedY;
+
+                    // Detectar colisiones con los bordes
+                    if (x + size > window.innerWidth || x < 0) {
+                        speedX = -speedX; // Invertir dirección en X
+                        x = x + size > window.innerWidth ? window.innerWidth - size : 0; // Ajustar posición
+                    }
+                    if (y + size > window.innerHeight || y < 0) {
+                        speedY = -speedY; // Invertir dirección en Y
+                        y = y + size > window.innerHeight ? window.innerHeight - size : 0; // Ajustar posición
+                    }
+
+                    // Actualizar datos
+                    data.x = x;
+                    data.y = y;
+                    data.speedX = speedX;
+                    data.speedY = speedY;
+
+                    // Aplicar nueva posición
+                    element.style.left = x + 'px';
+                    element.style.top = y + 'px';
+
+                    // Depuración
+                    console.log(`Círculo actualizado en x: ${x}, y: ${y}`);
+                });
+
+                requestAnimationFrame(animateCircles);
+            }
+
+            // Iniciar animación
+            animateCircles();
+        };
+
+        // Funciones para los juegos
+        function openGame(event, url) {
+            event.preventDefault();
+            console.log("Abriendo juego con URL:", url);
+            const iframeContainer = document.querySelector('.iframe-container');
+            const iframe = iframeContainer.querySelector('iframe');
+            iframe.src = url;
+            iframeContainer.classList.add('active');
+            iframeContainer.classList.remove('fullscreen');
+        }
+        function toggleFullscreen() {
+            const iframeContainer = document.querySelector('.iframe-container');
+            iframeContainer.classList.toggle('fullscreen');
+        }
+        function closeIframe() {
+            const iframeContainer = document.querySelector('.iframe-container');
+            const iframe = iframeContainer.querySelector('iframe');
+            iframe.src = '';
+            iframeContainer.classList.remove('active');
+            iframeContainer.classList.remove('fullscreen');
+        }
+    </script>
+</head>
+<body>
+    <div class="stars">
+        <div class="star"></div>
+        <div class="star"></div>
+        <div class="star"></div>
+        <div class="star"></div>
+        <div class="star"></div>
+        <div class="star"></div>
+        <div class="star"></div>
+        <div class="star"></div>
+        <div class="star"></div>
+        <div class="star"></div>
+    </div>
+    <div>
+        <h1>Unlocked LS</h1>
+        <p class="description">Esta página está creada para no aburrirte en clase viendo los artrópodos</p>
+        <h2>Juegos</h2>
+    </div>
+    <div class="game-container">
+        <div class="game-square">
+            <a href="#" onclick="openGame(event, 'https://faf-games.github.io/')">Faf Games</a>
+            <p>En esta página hay muchos juegos de la infancia y de móvil</p>
+        </div>
+        <div class="game-square">
+            <a href="#" onclick="openGame(event, 'https://d1tm91r4ytbt54.cloudfront.net/2779cbcb-a02f-48a3-9e2e-95a8d123d165/1685483461665/web/index.html')">Minecraft</a>
+            <p>Minecraft 100x100 funcional (solo que versión un poco antigua)</p>
+        </div>
+        <div class="game-square">
+            <p>Juego 3</p>
+        </div>
+        <div class="game-square">
+            <p>Juego 4</p>
+        </div>
+    </div>
+    <div class="proxy-section">
+        <h2>Proxy Integrado</h2>
+        <iframe src="https://interstellar-123.onrender.com"></iframe>
+    </div>
+    <div class="iframe-container">
+        <div class="iframe-controls">
+            <button onclick="toggleFullscreen()">Pantalla Grande</button>
+            <button onclick="closeIframe()">Cerrar</button>
+        </div>
+        <iframe src=""></iframe>
+    </div>
+</body>
+</html>
